@@ -82,7 +82,8 @@ def to_bytes(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-def news_card(headline: str, region: str, query: str) -> tuple[bytes, str | None]:
+def news_card(headline: str, region: str, query: str,
+              urgent: bool = False) -> tuple[bytes, str | None]:
     photo, image_id = stock_photo(query)
     base = ImageOps.fit(photo, (W, H), Image.LANCZOS, centering=(0.5, 0.4)) if photo \
         else gradient(region)
@@ -104,9 +105,10 @@ def news_card(headline: str, region: str, query: str) -> tuple[bytes, str | None
     lh = int(size * 1.18)
     y = H - 118 - lh * len(lines)
     tag_f = font(24)
-    tw = d.textlength(TAG[region], font=tag_f)
-    d.rounded_rectangle([PAD, y - 62, PAD + tw + 36, y - 18], 8, fill=ACCENT[region])
-    d.text((PAD + 18, y - 58), TAG[region], font=tag_f, fill=(10, 20, 30))
+    tag, tag_bg, tag_fg = ("СРОЧНО", (226, 48, 48), "white") if urgent else         (TAG[region], ACCENT[region], (10, 20, 30))
+    tw = d.textlength(tag, font=tag_f)
+    d.rounded_rectangle([PAD, y - 62, PAD + tw + 36, y - 18], 8, fill=tag_bg)
+    d.text((PAD + 18, y - 58), tag, font=tag_f, fill=tag_fg)
     for line in lines:
         d.text((PAD, y), line, font=fnt, fill="white")
         y += lh

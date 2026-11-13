@@ -64,6 +64,51 @@ def build_caption(art: dict, item) -> str:
         body = body[: body[:-1].rfind(".") + 1]  # убираем последнее предложение
 
 
+WAR = re.compile(
+    r"войн|воен|обстрел|ракетн|удар[а-я]* по |всу\b|фронт|беспилотник|дрон|бомб|боев|"
+    r"наступлени|артиллер|хамас|хезболл|цахал|мобилизац|сво\b|"
+    r"\bwar\b|strike|missile|drone|shelling|troops|military|airstrike|hamas|hezbollah", re.I)
+
+
+def _publish_item(item, region: str, dry: bool, urgent: bool = False) -> bool:
+    """Рерайт + картинка + публикация одной новости. False — новость отброшена."""
+    text = sources.article_text(item["url"])
+    if len(text) < 300:
+        text = f"{item['summary']}\n{text}"
+    if len(text) < 200:
+        db.set_status(item["id"], "skipped")
+        return False
+    art = llm.rewrite(item, text)
+    if art.get("skip") or not art.get("headline") or not art.get("body"):
+        db.set_status(item["id"], "skipped")
+        return False
+    art["emoji"] = "⚡️" if urgent else art.get("emoji") or "📰"
+    photo, image_id = card.news_card(art["headline"], region, art.get("image_query", ""), urgent)
+    mid = publish(photo, build_caption(art, item), dry, f"news_{item['id']}")
+    if not dry:
+        db.set_status(item["id"], "posted")
+        db.add_post(item["id"], now().strftime("%Y-%m-%d"), region, art["headline"], mid, image_id)
+    log.info("posted [%s%s] %s", region, ", urgent" if urgent else "", art["headline"])
+    return True
+
+
+def post_urgent(dry: bool) -> bool:
+    """Между плановыми постами: срочная новость выходит сразу, без ожидания интервала."""
+    since = float(db.kv_get("urgent_ts") or 0)
+    if not dry:
+        db.kv_set("urgent_ts", str(time.time()))
+    recent = db.recent_posts()
+    cands = [c for r in ("uz", "world") for c in db.candidates(r, 3)
+             if c["fetched"] > since and not WAR.search(c["title"])
+             and not any(_similar(c["title"], x["title"]) for x in recent)]
+    if not cands:
+        return False
+    pick = llm.urgent(cands, recent).get("urgent")
+    if not isinstance(pick, int) or not 0 <= pick < len(cands):
+        return False
+    return _publish_item(cands[pick], cands[pick]["region"], dry, urgent=True)
+
+
 def post_news(dry: bool) -> bool:
     day = now().strftime("%Y-%m-%d")
     first = _due_region(day)
@@ -72,7 +117,8 @@ def post_news(dry: bool) -> bool:
             recent = db.recent_posts()
             cands = []
             for c in db.candidates(region, CFG["max_item_age_hours"]):
-                if any(_similar(c["title"], r["title"]) for r in recent) or \
+                if WAR.search(c["title"]) or \
+                        any(_similar(c["title"], r["title"]) for r in recent) or \
                         any(_similar(c["title"], k["title"]) for k in cands):
                     db.set_status(c["id"], "skipped")
                 else:
@@ -86,25 +132,8 @@ def post_news(dry: bool) -> bool:
             pick = sel.get("pick")
             if not isinstance(pick, int) or not 0 <= pick < len(cands):
                 break
-            item = cands[pick]
-            text = sources.article_text(item["url"])
-            if len(text) < 300:
-                text = f"{item['summary']}\n{text}"
-            if len(text) < 200:
-                db.set_status(item["id"], "skipped")
-                continue
-            art = llm.rewrite(item, text)
-            if art.get("skip") or not art.get("headline") or not art.get("body"):
-                db.set_status(item["id"], "skipped")
-                continue
-            art.setdefault("emoji", "📰")
-            photo, image_id = card.news_card(art["headline"], region, art.get("image_query", ""))
-            mid = publish(photo, build_caption(art, item), dry, f"news_{item['id']}")
-            if not dry:
-                db.set_status(item["id"], "posted")
-                db.add_post(item["id"], day, region, art["headline"], mid, image_id)
-            log.info("posted [%s] %s", region, art["headline"])
-            return True
+            if _publish_item(cands[pick], region, dry):
+                return True
     log.info("nothing to post")
     return False
 
@@ -197,5 +226,6 @@ def tick(dry: bool = False, force: bool = False) -> None:
         _daily("rates_day", CFG["rates_post_hour"], post_rates, dry)
         _daily("digest_day", CFG["digest_post_hour"], post_digest, dry)
         if time.time() - db.last_post_ts() < CFG["post_interval_min"] * 60:
+            post_urgent(dry)
             return
     post_news(dry)
