@@ -1,18 +1,22 @@
 name: news
 on:
-  schedule:
-    # каждые 20 минут с 07:03 до 22:43 по Ташкенту (UTC+5)
-    - cron: "3,23,43 2-17 * * *"
   workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"   # страховка: если цепочка оборвалась, запустить заново
 
+# одновременно работает только один цикл; новый запуск при живом старом отменяется
 concurrency:
-  group: news
+  group: news-loop
   cancel-in-progress: false
 
+permissions:
+  actions: write
+  contents: read
+
 jobs:
-  tick:
+  loop:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 355            # лимит GitHub на job — 6 часов
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -20,8 +24,6 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install -q -r requirements.txt
-      - name: Fonts
-        run: ls /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf || sudo apt-get install -y -q fonts-dejavu-core
       - name: Restore state
         uses: actions/cache/restore@v4
         with:
@@ -32,16 +34,26 @@ jobs:
         run: |
           mkdir -p data
           [ -f data/news.db ] || cp seed/news.db data/news.db 2>/dev/null || true
-      - name: Post
-        run: python main.py tick
+      - name: Tick every 5 minutes for ~5.5 hours
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}
+        run: |
+          end=$(( $(date +%s) + 330*60 ))
+          while [ $(date +%s) -lt $end ]; do
+            python main.py tick || true
+            sleep 300
+          done
       - name: Save state
         if: always()
         uses: actions/cache/save@v4
         with:
           path: data
           key: state-${{ github.run_id }}
+      - name: Start next cycle
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run news -R ${{ github.repository }}
