@@ -1,0 +1,39 @@
+# ── Канал ────────────────────────────────────────────────────────────────
+channel_title: "NUQTA"   # подпись на картинках и в постах
+language: "русский"                      # язык постов (LLM переводит источники сам)
+
+# ── Расписание (время Ташкента) ──────────────────────────────────────────
+timezone: "Asia/Tashkent"
+active_hours: [7, 23]        # посты выходят с 07:00 до 23:00
+post_interval_min: 50        # минимум минут между новостями (~19 постов в день)
+world_share: 0.35            # доля мировых новостей, остальное Узбекистан
+max_item_age_hours: 8        # новости старше не берём
+rates_post_hour: 8           # утренний пост: курсы ЦБ + погода
+digest_post_hour: 21         # вечерний дайджест «Главное за день»
+weather: {city: "Ташкенте", lat: 41.31, lon: 69.24}
+
+# ── Gemini (рерайт). Модели пробуются по очереди, если одна перегружена ──
+gemini_models:
+  - gemini-3.5-flash-lite     # быстрые и стабильные на бесплатном тарифе
+  - gemini-3.1-flash-lite
+  - gemini-3.8-flash          # умнее, но часто перегружены (503)
+  - gemini-3.5-flash
+
+# ── Источники (RSS). region: uz | world ──────────────────────────────────
+feeds:
+  - {name: "Gazeta.uz",   region: uz,    url: "https://www.gazeta.uz/ru/rss/"}
+  - {name: "Spot.uz",     region: uz,    url: "https://www.spot.uz/ru/rss/"}
+  - {name: "Kun.uz",      region: uz,    url: "https://kun.uz/ru/news/rss"}
+  - {name: "Podrobno.uz", region: uz,    url: "https://podrobno.uz/rss/"}
+  - {name: "Daryo",       region: uz,    url: "https://daryo.uz/ru/feed/"}
+  - {name: "UzA",         region: uz,    url: "https://uza.uz/ru/rss"}
+  - {name: "Nuz.uz",      region: uz,    url: "https://nuz.uz/feed"}
+  - {name: "Upl.uz",      region: uz,    url: "https://upl.uz/rss.xml"}
+  - {name: "Xabar.uz",    region: uz,    url: "https://xabar.uz/rss"}
+  - {name: "Kursiv",      region: uz,    url: "https://kursiv.media/uz/feed/"}
+  - {name: "DW",          region: world, url: "https://rss.dw.com/xml/rss-ru-all"}
+  - {name: "Euronews",    region: world, url: "https://ru.euronews.com/rss"}
+  - {name: "BBC",         region: world, url: "https://feeds.bbci.co.uk/russian/rss.xml"}
+  - {name: "Al Jazeera",  region: world, url: "https://www.aljazeera.com/xml/rss/all.xml"}
+  - {name: "The Guardian", region: world, url: "https://www.theguardian.com/world/rss"}
+  - {name: "Интерфакс",   region: world, url: "https://www.interfax.ru/rss.asp"}
